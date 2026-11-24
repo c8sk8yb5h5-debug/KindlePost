@@ -60,7 +60,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        androidx.activity.enableEdgeToEdge(statusBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT), navigationBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
         setContent {
             MaterialTheme {
                 var sender by remember { mutableStateOf(prefs.getString("sender", "") ?: "") }
@@ -269,10 +275,10 @@ private fun formatBytes(value: Long): String =
 
 @Composable
 private fun SettingsGlyph() {
+    val color = MaterialTheme.colorScheme.primary
     androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
         val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension * 0.32f
-        val color = MaterialTheme.colorScheme.primary
         drawCircle(color, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.8.dp.toPx()))
         drawCircle(color, size.minDimension * 0.09f, c)
         repeat(8) { i ->
@@ -286,8 +292,8 @@ private fun SettingsGlyph() {
 
 @Composable
 private fun PhotoGlyph() {
+    val color = MaterialTheme.colorScheme.primary
     androidx.compose.foundation.Canvas(Modifier.size(20.dp)) {
-        val color = MaterialTheme.colorScheme.primary
         val sw = 1.7.dp.toPx()
         drawRoundRect(color, cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
         val p = androidx.compose.ui.graphics.Path().apply {
