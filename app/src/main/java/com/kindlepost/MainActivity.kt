@@ -196,7 +196,7 @@ private fun prepareAndSend(context: Context, uris: List<Uri>, sender: String, au
 
 private fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
     var sample = 1
-    while (width / (sample * 2) >= maxEdge && height / (sample * 2) >= maxEdge) sample *= 2
+    while (maxOf(width, height) / (sample * 2) >= maxEdge) sample *= 2
     return sample
 }
 
