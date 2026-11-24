@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
                 var updateStatus by remember { mutableStateOf("") }
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
+                var downloadedUpdate by remember { mutableStateOf(false) }
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
                 ) { selected ->
@@ -96,6 +97,7 @@ class MainActivity : ComponentActivity() {
                         }) { Text("下载更新") }
                     }
                     if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
+                    if (downloadedUpdate) OutlinedButton(onClick = { try { UpdateManager.install(this@MainActivity) } catch (e: Exception) { updateStatus = "安装失败：${e.message}" } }, modifier = Modifier.fillMaxWidth()) { Text("安装已下载更新") }
                     OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
