@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
                 var authCode by remember { mutableStateOf(prefs.getString("auth", "") ?: "") }
                 var recipient by remember { mutableStateOf(prefs.getString("recipient", "") ?: "") }
                 var photos by remember { mutableStateOf(listOf<Uri>()) }
-                var status by remember { mutableStateOf("选择照片后发送到 Kindle") }
+                var status by remember { mutableStateOf("") }
                 var busy by remember { mutableStateOf(false) }
                 var sizes by remember { mutableStateOf("") }
                 var updateStatus by remember { mutableStateOf("") }
@@ -81,7 +81,6 @@ class MainActivity : ComponentActivity() {
                         Text("KindlePost", style = MaterialTheme.typography.headlineMedium)
                         OutlinedButton(onClick = { settingsOpen = true }) { Text("设置") }
                     }
-                    Text(if (sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank()) "邮箱设置已保存" else "请先在设置中填写邮箱信息", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(enabled = !updateBusy, onClick = {
                             updateBusy = true
@@ -141,7 +140,34 @@ class MainActivity : ComponentActivity() {
                                 OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                                 OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                                 OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                Text("信息仅保存在本机，并使用 Android 加密存储。", style = MaterialTheme.typography.bodySmall)
+                                HorizontalDivider()
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                    OutlinedButton(enabled = !updateBusy, onClick = {
+                                        updateBusy = true
+                                        updateStatus = "检查中…"
+                                        lifecycleScope.launch {
+                                            try {
+                                                val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
+                                                availableUpdate = update
+                                                updateStatus = if (update == null) "已是最新版本" else "发现新版本 ${update.versionName}"
+                                            } catch (e: Exception) { updateStatus = "检查失败" }
+                                            finally { updateBusy = false }
+                                        }
+                                    }, modifier = Modifier.weight(1f)) { Text(if (updateBusy) "检查中…" else "检查更新") }
+                                    if (availableUpdate != null) Button(onClick = {
+                                        try {
+                                            UpdateManager.download(this@MainActivity, availableUpdate!!)
+                                            downloadedUpdate = true
+                                            updateStatus = "已开始下载"
+                                            availableUpdate = null
+                                        } catch (e: Exception) { updateStatus = "下载失败" }
+                                    }, modifier = Modifier.weight(1f)) { Text("下载更新") }
+                                }
+                                if (downloadedUpdate) OutlinedButton(onClick = {
+                                    if (!packageManager.canRequestPackageInstalls()) startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                                    else try { UpdateManager.install(this@MainActivity) } catch (e: Exception) { updateStatus = "安装失败" }
+                                }, modifier = Modifier.fillMaxWidth()) { Text("安装更新") }
+                                if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
                         },
                         confirmButton = {
@@ -151,7 +177,6 @@ class MainActivity : ComponentActivity() {
                                 authCode = authCode.trim()
                                 recipient = recipient.trim()
                                 settingsOpen = false
-                                status = "邮箱设置已保存"
                             }) { Text("保存") }
                         },
                         dismissButton = { TextButton(onClick = { settingsOpen = false }) { Text("取消") } }
