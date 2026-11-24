@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
+import android.os.Environment
+import java.io.File
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -64,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 var updateStatus by remember { mutableStateOf("") }
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
-                var downloadedUpdate by remember { mutableStateOf(false) }
+                var downloadedUpdate by remember { mutableStateOf(File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "KindlePost-update.apk").exists()) }
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
                 ) { selected ->
@@ -91,7 +93,7 @@ class MainActivity : ComponentActivity() {
                         if (availableUpdate != null) Button(onClick = {
                             try {
                                 UpdateManager.download(this@MainActivity, availableUpdate!!)
-                                updateStatus = "已开始下载，完成后点击通知安装"
+                                updateStatus = "已开始下载，下载完成后重新打开应用即可安装"
                                 availableUpdate = null
                             } catch (e: Exception) { updateStatus = "下载失败：${e.message}" }
                         }) { Text("下载更新") }
