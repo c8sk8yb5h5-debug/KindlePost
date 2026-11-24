@@ -14,6 +14,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
@@ -54,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        androidx.activity.enableEdgeToEdge(statusBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT), navigationBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT))
         setContent {
             MaterialTheme {
                 var sender by remember { mutableStateOf(prefs.getString("sender", "") ?: "") }
@@ -76,37 +83,13 @@ class MainActivity : ComponentActivity() {
                     sizes = ""
                 }
 
-                Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text("KindlePost", style = MaterialTheme.typography.headlineMedium)
-                        OutlinedButton(onClick = { settingsOpen = true }) { Text("设置") }
+                Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFFFFFEFC)).windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("KindlePost", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Light, letterSpacing = (-1.1).sp))
+                        IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)) { SettingsGlyph() }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(enabled = !updateBusy, onClick = {
-                            updateBusy = true
-                            updateStatus = "正在检查更新…"
-                            lifecycleScope.launch {
-                                try {
-                                    val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
-                                    availableUpdate = update
-                                    updateStatus = if (update == null) "已是最新版本" else "发现新版本 ${update.versionName}"
-                                } catch (e: Exception) { updateStatus = "检查失败：${e.message ?: "网络错误"}" }
-                                finally { updateBusy = false }
-                            }
-                        }) { Text(if (updateBusy) "检查中…" else "检查更新") }
-                        if (availableUpdate != null) Button(onClick = {
-                            try {
-                                UpdateManager.download(this@MainActivity, availableUpdate!!)
-                                downloadedUpdate = true
-                                updateStatus = "已开始下载，完成后点击安装更新"
-                                availableUpdate = null
-                            } catch (e: Exception) { updateStatus = "下载失败：${e.message}" }
-                        }) { Text("下载更新") }
-                    }
-                    if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
-                    if (downloadedUpdate) OutlinedButton(onClick = { if (!packageManager.canRequestPackageInstalls()) startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName"))) else try { UpdateManager.install(this@MainActivity) } catch (e: Exception) { updateStatus = "安装失败：${e.message}" } }, modifier = Modifier.fillMaxWidth()) { Text("安装已下载更新") }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (photos.isEmpty()) "选择照片" else "重新选择") }
+                        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, modifier = Modifier.weight(1f).height(58.dp), shape = RoundedCornerShape(32.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { PhotoGlyph(); Spacer(Modifier.width(10.dp)); Text(if (photos.isEmpty()) "选择照片" else "添加照片", fontSize = 17.sp) }
                         if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); sizes = ""; status = "已清空" }, enabled = !busy) { Text("清空") }
                     }
                     if (photos.isNotEmpty()) {
@@ -129,12 +112,12 @@ class MainActivity : ComponentActivity() {
                             } catch (e: Exception) { status = "发送失败：${e.message ?: "请检查邮箱设置"}" }
                             finally { busy = false }
                         }
-                    }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片") }
+                    }, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(32.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, disabledContainerColor = androidx.compose.ui.graphics.Color(0xFFE4E2E6), disabledContentColor = androidx.compose.ui.graphics.Color(0xFF99969E))) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片", fontSize = 17.sp) }
                 }
                 if (settingsOpen) {
                     AlertDialog(
                         onDismissRequest = { settingsOpen = false },
-                        title = { Text("邮箱设置") },
+                        title = { Text("设置") },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -282,3 +265,39 @@ private fun applyExifOrientation(context: Context, uri: Uri, source: Bitmap): Bi
 
 private fun formatBytes(value: Long): String =
     if (value < 1024) "${value} B" else String.format("%.1f MB", value / 1024f / 1024f)
+
+
+@Composable
+private fun SettingsGlyph() {
+    androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+        val c = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+        val r = size.minDimension * 0.32f
+        val color = MaterialTheme.colorScheme.primary
+        drawCircle(color, r, c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.8.dp.toPx()))
+        drawCircle(color, size.minDimension * 0.09f, c)
+        repeat(8) { i ->
+            val a = Math.toRadians(i * 45.0)
+            val p1 = androidx.compose.ui.geometry.Offset(c.x + kotlin.math.cos(a).toFloat() * (r + 1.dp.toPx()), c.y + kotlin.math.sin(a).toFloat() * (r + 1.dp.toPx()))
+            val p2 = androidx.compose.ui.geometry.Offset(c.x + kotlin.math.cos(a).toFloat() * (r + 4.dp.toPx()), c.y + kotlin.math.sin(a).toFloat() * (r + 4.dp.toPx()))
+            drawLine(color, p1, p2, 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+    }
+}
+
+@Composable
+private fun PhotoGlyph() {
+    androidx.compose.foundation.Canvas(Modifier.size(20.dp)) {
+        val color = MaterialTheme.colorScheme.primary
+        val sw = 1.7.dp.toPx()
+        drawRoundRect(color, cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()), style = androidx.compose.ui.graphics.drawscope.Stroke(sw))
+        val p = androidx.compose.ui.graphics.Path().apply {
+            moveTo(size.width * .16f, size.height * .76f)
+            lineTo(size.width * .43f, size.height * .48f)
+            lineTo(size.width * .59f, size.height * .64f)
+            lineTo(size.width * .75f, size.height * .42f)
+            lineTo(size.width * .88f, size.height * .58f)
+        }
+        drawPath(p, color, style = androidx.compose.ui.graphics.drawscope.Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawCircle(color, 1.4.dp.toPx(), androidx.compose.ui.geometry.Offset(size.width * .34f, size.height * .28f))
+    }
+}
