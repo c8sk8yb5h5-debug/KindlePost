@@ -61,6 +61,9 @@ class MainActivity : ComponentActivity() {
                 var status by remember { mutableStateOf("选择照片后发送到 Kindle") }
                 var busy by remember { mutableStateOf(false) }
                 var sizes by remember { mutableStateOf("") }
+                var updateStatus by remember { mutableStateOf("") }
+                var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
+                var updateBusy by remember { mutableStateOf(false) }
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
                 ) { selected ->
@@ -71,6 +74,28 @@ class MainActivity : ComponentActivity() {
 
                 Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("KindlePost", style = MaterialTheme.typography.headlineMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(enabled = !updateBusy, onClick = {
+                            updateBusy = true
+                            updateStatus = "正在检查更新…" 
+                            lifecycleScope.launch {
+                                try {
+                                    val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
+                                    availableUpdate = update
+                                    updateStatus = if (update == null) "已是最新版本" else "发现新版本 ${update.versionName}"
+                                } catch (e: Exception) { updateStatus = "检查失败：${e.message ?: "网络错误"}" }
+                                finally { updateBusy = false }
+                            }
+                        }) { Text(if (updateBusy) "检查中…" else "检查更新") }
+                        if (availableUpdate != null) Button(onClick = {
+                            try {
+                                UpdateManager.download(this@MainActivity, availableUpdate!!)
+                                updateStatus = "已开始下载，完成后点击通知安装"
+                                availableUpdate = null
+                            } catch (e: Exception) { updateStatus = "下载失败：${e.message}" }
+                        }) { Text("下载更新") }
+                    }
+                    if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
