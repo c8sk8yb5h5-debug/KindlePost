@@ -68,7 +68,7 @@ jobs:
           mkdir -p release-output
           cp app/build/outputs/apk/release/app-release.apk release-output/KindlePost.apk
           sha256sum release-output/KindlePost.apk > release-output/SHA256SUMS.txt
-          apksigner verify --verbose release-output/KindlePost.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose release-output/KindlePost.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
