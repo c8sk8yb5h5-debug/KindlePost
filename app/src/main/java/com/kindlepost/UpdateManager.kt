@@ -17,7 +17,7 @@ object UpdateManager {
     private const val MANIFEST_URL = "https://raw.githubusercontent.com/c8sk8yb5h5-debug/KindlePost/main/version.json"
 
     fun check(context: Context): AppUpdate? {
-        val connection = (URL(MANIFEST_URL).openConnection() as HttpURLConnection).apply {
+        val connection = (URL("$MANIFEST_URL?cacheBust=${System.currentTimeMillis()}").openConnection() as HttpURLConnection).apply {
             connectTimeout = 12000
             readTimeout = 12000
             setRequestProperty("Cache-Control", "no-cache")
