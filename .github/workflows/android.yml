@@ -13,6 +13,11 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,15 +39,36 @@ jobs:
           packages: "platform-tools platforms;android-35 build-tools;35.0.0"
           accept-android-sdk-licenses: true
 
-      - name: Build installable debug APK
-        run: gradle --no-daemon clean assembleDebug
+      - name: Validate and decode persistent signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/kindlepost-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/kindlepost-release.jks" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/kindlepost-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        run: gradle --no-daemon clean assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/kindlepost-release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Prepare release files
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p release-output
-          cp app/build/outputs/apk/debug/app-debug.apk release-output/KindlePost.apk
+          cp app/build/outputs/apk/release/app-release.apk release-output/KindlePost.apk
           sha256sum release-output/KindlePost.apk > release-output/SHA256SUMS.txt
+          apksigner verify --verbose release-output/KindlePost.apk
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
