@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var downloadedUpdate by remember { mutableStateOf(File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "KindlePost-update.apk").exists()) }
+                var settingsOpen by remember { mutableStateOf(false) }
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
                 ) { selected ->
@@ -76,11 +77,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 Column(Modifier.fillMaxSize().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("KindlePost", style = MaterialTheme.typography.headlineMedium)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("KindlePost", style = MaterialTheme.typography.headlineMedium)
+                        OutlinedButton(onClick = { settingsOpen = true }) { Text("设置") }
+                    }
+                    Text(if (sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank()) "邮箱设置已保存" else "请先在设置中填写邮箱信息", style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(enabled = !updateBusy, onClick = {
                             updateBusy = true
-                            updateStatus = "正在检查更新…" 
+                            updateStatus = "正在检查更新…"
                             lifecycleScope.launch {
                                 try {
                                     val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
@@ -101,52 +106,56 @@ class MainActivity : ComponentActivity() {
                     }
                     if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                     if (downloadedUpdate) OutlinedButton(onClick = { if (!packageManager.canRequestPackageInstalls()) startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName"))) else try { UpdateManager.install(this@MainActivity) } catch (e: Exception) { updateStatus = "安装失败：${e.message}" } }, modifier = Modifier.fillMaxWidth()) { Text("安装已下载更新") }
-                    OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                            enabled = !busy,
-                            modifier = Modifier.weight(1f)
-                        ) { Text(if (photos.isEmpty()) "选择照片" else "重新选择") }
-                        if (photos.isNotEmpty()) {
-                            OutlinedButton(onClick = { photos = emptyList(); sizes = ""; status = "已清空" }, enabled = !busy) { Text("清空") }
-                        }
+                        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (photos.isEmpty()) "选择照片" else "重新选择") }
+                        if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); sizes = ""; status = "已清空" }, enabled = !busy) { Text("清空") }
                     }
                     if (photos.isNotEmpty()) {
                         Text("已选 ${photos.size}/${MAX_PHOTOS} 张", style = MaterialTheme.typography.titleSmall)
                         LazyColumn(Modifier.weight(1f, fill = true)) {
-                            itemsIndexed(photos) { index, uri ->
-                                Text("${index + 1}. ${uri.lastPathSegment ?: "照片"}", maxLines = 1, modifier = Modifier.padding(vertical = 3.dp))
-                            }
+                            itemsIndexed(photos) { index, uri -> Text("${index + 1}. ${uri.lastPathSegment ?: "照片"}", maxLines = 1, modifier = Modifier.padding(vertical = 3.dp)) }
                         }
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
+                    } else Spacer(Modifier.weight(1f))
                     if (sizes.isNotBlank()) Text(sizes, style = MaterialTheme.typography.bodySmall)
                     Text(status, style = MaterialTheme.typography.bodySmall)
-                    Button(
-                        enabled = !busy && photos.isNotEmpty() && sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank(),
-                        onClick = {
-                            prefs.edit().putString("sender", sender.trim()).putString("auth", authCode.trim())
-                                .putString("recipient", recipient.trim()).apply()
-                            busy = true
-                            status = "正在压缩照片…"
-                            lifecycleScope.launch {
-                                try {
-                                    val result = withContext(Dispatchers.IO) {
-                                        prepareAndSend(this@MainActivity, photos, sender.trim(), authCode.trim(), recipient.trim())
-                                    }
-                                    sizes = result
-                                    status = "发送成功 · ${photos.size} 张"
-                                    photos = emptyList()
-                                } catch (e: Exception) {
-                                    status = "发送失败：${e.message ?: "请检查邮箱设置"}"
-                                } finally { busy = false }
+                    Button(enabled = !busy && photos.isNotEmpty() && sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank(), onClick = {
+                        busy = true
+                        status = "正在压缩照片…"
+                        lifecycleScope.launch {
+                            try {
+                                val result = withContext(Dispatchers.IO) { prepareAndSend(this@MainActivity, photos, sender.trim(), authCode.trim(), recipient.trim()) }
+                                sizes = result
+                                status = "发送成功 · ${photos.size} 张"
+                                photos = emptyList()
+                            } catch (e: Exception) { status = "发送失败：${e.message ?: "请检查邮箱设置"}" }
+                            finally { busy = false }
+                        }
+                    }, modifier = Modifier.fillMaxWidth()) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片") }
+                }
+                if (settingsOpen) {
+                    AlertDialog(
+                        onDismissRequest = { settingsOpen = false },
+                        title = { Text("邮箱设置") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                Text("信息仅保存在本机，并使用 Android 加密存储。", style = MaterialTheme.typography.bodySmall)
                             }
-                        }, modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片") }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                prefs.edit().putString("sender", sender.trim()).putString("auth", authCode.trim()).putString("recipient", recipient.trim()).apply()
+                                sender = sender.trim()
+                                authCode = authCode.trim()
+                                recipient = recipient.trim()
+                                settingsOpen = false
+                                status = "邮箱设置已保存"
+                            }) { Text("保存") }
+                        },
+                        dismissButton = { TextButton(onClick = { settingsOpen = false }) { Text("取消") } }
+                    )
                 }
             }
         }
