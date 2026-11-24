@@ -29,3 +29,6 @@ The sender address must be added to the approved personal document e-mail list i
 
 ## Privacy
 Photos are processed locally and attached directly to the email. No photo upload service or analytics is included.
+
+## In-app updates
+The app checks the public `version.json` manifest on the `main` branch. When a newer version is available, it downloads the APK from the `continuous` GitHub Release. The user must approve Android's package installation prompt. The APK is signed with the same persistent release key, so future versions can update in place.
