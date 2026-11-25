@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -161,28 +163,49 @@ class MainActivity : ComponentActivity() {
                                 HorizontalDivider()
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                     Text("当前版本 $currentVersion", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                    OutlinedButton(enabled = !updateBusy, onClick = {
-                                        updateBusy = true
-                                        updateStatus = "正在检查…"
-                                        lifecycleScope.launch {
-                                            try {
-                                                val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
-                                                if (update == null) {
-                                                    updateStatus = "已是最新版本"
-                                                } else {
-                                                    updateStatus = "正在下载 ${update.versionName}…"
-                                                    withContext(Dispatchers.IO) { UpdateManager.download(this@MainActivity, update) }
-                                                    updateStatus = "正在启动安装…"
-                                                    if (!packageManager.canRequestPackageInstalls()) {
-                                                        installPermissionLauncher.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                                    val updateInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    val updatePressed by updateInteraction.collectIsPressedAsState()
+                                    val updateScale by androidx.compose.animation.core.animateFloatAsState(
+                                        targetValue = if (updatePressed) 0.96f else 1f,
+                                        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 500f),
+                                        label = "updateButtonScale"
+                                    )
+                                    OutlinedButton(
+                                        enabled = !updateBusy,
+                                        onClick = {
+                                            updateBusy = true
+                                            updateStatus = "正在检查…"
+                                            lifecycleScope.launch {
+                                                try {
+                                                    val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
+                                                    if (update == null) {
+                                                        updateStatus = "当前是最新版本"
                                                     } else {
-                                                        UpdateManager.install(this@MainActivity)
+                                                        updateStatus = "正在下载 ${update.versionName}…"
+                                                        withContext(Dispatchers.IO) { UpdateManager.download(this@MainActivity, update) }
+                                                        updateStatus = "下载完成，准备安装…"
+                                                        if (!packageManager.canRequestPackageInstalls()) {
+                                                            installPermissionLauncher.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                                                        } else {
+                                                            UpdateManager.install(this@MainActivity)
+                                                        }
                                                     }
+                                                } catch (e: Exception) {
+                                                    updateStatus = e.message ?: "更新失败"
+                                                } finally {
+                                                    updateBusy = false
                                                 }
-                                            } catch (e: Exception) { updateStatus = e.message ?: "更新失败" }
-                                            finally { updateBusy = false }
-                                        }
-                                    }, modifier = Modifier.weight(1f)) { Text(if (updateBusy) "检查中…" else "检查更新") }
+                                            }
+                                        },
+                                        interactionSource = updateInteraction,
+                                        modifier = Modifier.weight(1f).graphicsLayer { scaleX = updateScale; scaleY = updateScale }
+                                    ) {
+                                        if (updateBusy) {
+                                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("更新中…")
+                                        } else Text("检查更新")
+                                    }
                                 }
                                 if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
