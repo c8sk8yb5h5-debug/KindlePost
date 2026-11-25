@@ -118,13 +118,17 @@ class MainActivity : ComponentActivity() {
                     } else updateStatus = "未获得安装权限"
                 }
 
+                val (settingsPressSource, settingsPressModifier) = rememberButtonPress()
+                val (photoPressSource, photoPressModifier) = rememberButtonPress()
+                val (sendPressSource, sendPressModifier) = rememberButtonPress()
+
                 Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFFFFFEFC)).windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text("KindlePost", style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Light, letterSpacing = (-1.1).sp))
-                        IconButton(onClick = { settingsOpen = true }, modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)) { SettingsGlyph() }
+                        IconButton(onClick = { settingsOpen = true }, interactionSource = settingsPressSource, modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape).then(settingsPressModifier)) { SettingsGlyph() }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, modifier = Modifier.weight(1f).height(58.dp), shape = RoundedCornerShape(32.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { PhotoGlyph(); Spacer(Modifier.width(10.dp)); Text(if (photos.isEmpty()) "选择照片" else "添加照片", fontSize = 17.sp) }
+                        OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, interactionSource = photoPressSource, modifier = Modifier.weight(1f).height(58.dp).then(photoPressModifier), shape = RoundedCornerShape(32.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { PhotoGlyph(); Spacer(Modifier.width(10.dp)); Text(if (photos.isEmpty()) "选择照片" else "添加照片", fontSize = 17.sp) }
                         if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); compressedBatch = null; sizes = ""; status = "" }, enabled = !busy) { Text("清空") }
                     }
                     if (photos.isNotEmpty()) {
@@ -149,7 +153,7 @@ class MainActivity : ComponentActivity() {
                             } catch (e: Exception) { status = "发送失败：${e.message ?: "请检查邮箱设置"}" }
                             finally { busy = false }
                         }
-                    }, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(32.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, disabledContainerColor = androidx.compose.ui.graphics.Color(0xFFE4E2E6), disabledContentColor = androidx.compose.ui.graphics.Color(0xFF99969E))) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片", fontSize = 17.sp) }
+                    }, interactionSource = sendPressSource, modifier = Modifier.fillMaxWidth().height(58.dp).then(sendPressModifier), shape = RoundedCornerShape(32.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, disabledContainerColor = androidx.compose.ui.graphics.Color(0xFFE4E2E6), disabledContentColor = androidx.compose.ui.graphics.Color(0xFF99969E))) { Text(if (busy) "发送中…" else "发送 ${photos.size} 张照片", fontSize = 17.sp) }
                 }
                 if (settingsOpen) {
                     AlertDialog(
@@ -321,6 +325,17 @@ private fun formatBytes(value: Long): String =
     if (value < 1024) "${value} B" else String.format("%.1f MB", value / 1024f / 1024f)
 
 
+@Composable
+private fun rememberButtonPress(): Pair<androidx.compose.foundation.interaction.MutableInteractionSource, Modifier> {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.96f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.55f, stiffness = 500f),
+        label = "buttonPressScale"
+    )
+    return source to Modifier.graphicsLayer { scaleX = scale; scaleY = scale }
+}
 @Composable
 private fun SettingsGlyph() {
     val color = MaterialTheme.colorScheme.primary
