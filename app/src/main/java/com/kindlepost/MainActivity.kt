@@ -79,7 +79,6 @@ class MainActivity : ComponentActivity() {
                 var sizes by remember { mutableStateOf("") }
                 val currentVersion = remember { packageManager.getPackageInfo(packageName, 0).versionName ?: "未知" }
                 var updateStatus by remember { mutableStateOf("") }
-                var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
                 var settingsOpen by remember { mutableStateOf(false) }
                 val picker = rememberLauncherForActivityResult(
