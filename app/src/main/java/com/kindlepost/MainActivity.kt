@@ -73,9 +73,11 @@ class MainActivity : ComponentActivity() {
                 var authCode by remember { mutableStateOf(prefs.getString("auth", "") ?: "") }
                 var recipient by remember { mutableStateOf(prefs.getString("recipient", "") ?: "") }
                 var photos by remember { mutableStateOf(listOf<Uri>()) }
+                var compressedBatch by remember { mutableStateOf<CompressedBatch?>(null) }
                 var status by remember { mutableStateOf("") }
                 var busy by remember { mutableStateOf(false) }
                 var sizes by remember { mutableStateOf("") }
+                val currentVersion = remember { packageManager.getPackageInfo(packageName, 0).versionName ?: "未知" }
                 var updateStatus by remember { mutableStateOf("") }
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
@@ -84,8 +86,26 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
                 ) { selected ->
                     photos = selected.take(MAX_PHOTOS)
-                    status = if (photos.isEmpty()) "未选择照片" else "已选择 ${photos.size} 张照片"
+                    compressedBatch = null
                     sizes = ""
+                    if (photos.isEmpty()) {
+                        status = ""
+                    } else {
+                        busy = true
+                        status = "正在压缩照片…"
+                        val selectedPhotos = photos
+                        lifecycleScope.launch {
+                            try {
+                                val batch = withContext(Dispatchers.IO) { compressPhotos(this@MainActivity, selectedPhotos) }
+                                compressedBatch = batch
+                                sizes = "原图 ${formatBytes(batch.originalBytes)} · 压缩后 ${formatBytes(batch.compressedBytes)}"
+                                status = "已压缩 ${batch.photos.size} 张照片"
+                            } catch (e: Exception) {
+                                compressedBatch = null
+                                status = e.message ?: "照片压缩失败"
+                            } finally { busy = false }
+                        }
+                    }
                 }
 
                 val installPermissionLauncher = rememberLauncherForActivityResult(
@@ -104,7 +124,7 @@ class MainActivity : ComponentActivity() {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, modifier = Modifier.weight(1f).height(58.dp), shape = RoundedCornerShape(32.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { PhotoGlyph(); Spacer(Modifier.width(10.dp)); Text(if (photos.isEmpty()) "选择照片" else "添加照片", fontSize = 17.sp) }
-                        if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); sizes = ""; status = "已清空" }, enabled = !busy) { Text("清空") }
+                        if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); compressedBatch = null; sizes = ""; status = "" }, enabled = !busy) { Text("清空") }
                     }
                     if (photos.isNotEmpty()) {
                         Text("已选 ${photos.size}/${MAX_PHOTOS} 张", style = MaterialTheme.typography.titleSmall)
@@ -114,15 +134,17 @@ class MainActivity : ComponentActivity() {
                     } else Spacer(Modifier.weight(1f))
                     if (sizes.isNotBlank()) Text(sizes, style = MaterialTheme.typography.bodySmall)
                     Text(status, style = MaterialTheme.typography.bodySmall)
-                    Button(enabled = !busy && photos.isNotEmpty() && sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank(), onClick = {
+                    Button(enabled = !busy && compressedBatch != null && sender.isNotBlank() && authCode.isNotBlank() && recipient.isNotBlank(), onClick = {
                         busy = true
-                        status = "正在压缩照片…"
+                        status = "正在发送…"
                         lifecycleScope.launch {
                             try {
-                                val result = withContext(Dispatchers.IO) { prepareAndSend(this@MainActivity, photos, sender.trim(), authCode.trim(), recipient.trim()) }
-                                sizes = result
-                                status = "发送成功 · ${photos.size} 张"
+                                val batch = compressedBatch ?: error("请先选择照片")
+                                withContext(Dispatchers.IO) { sendCompressedPhotos(sender.trim(), authCode.trim(), recipient.trim(), batch.photos) }
+                                status = "发送成功 · ${batch.photos.size} 张"
                                 photos = emptyList()
+                                compressedBatch = null
+                                sizes = ""
                             } catch (e: Exception) { status = "发送失败：${e.message ?: "请检查邮箱设置"}" }
                             finally { busy = false }
                         }
@@ -139,40 +161,29 @@ class MainActivity : ComponentActivity() {
                                 OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                                 HorizontalDivider()
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                    Text("当前版本 $currentVersion", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                                     OutlinedButton(enabled = !updateBusy, onClick = {
                                         updateBusy = true
-                                        updateStatus = "检查中…"
+                                        updateStatus = "正在检查…"
                                         lifecycleScope.launch {
                                             try {
                                                 val update = withContext(Dispatchers.IO) { UpdateManager.check(this@MainActivity) }
-                                                availableUpdate = update
-                                                updateStatus = if (update == null) "已是最新版本" else "发现新版本 ${update.versionName}"
-                                            } catch (e: Exception) { updateStatus = "检查失败" }
+                                                if (update == null) {
+                                                    updateStatus = "已是最新版本"
+                                                } else {
+                                                    updateStatus = "正在下载 ${update.versionName}…"
+                                                    withContext(Dispatchers.IO) { UpdateManager.download(this@MainActivity, update) }
+                                                    updateStatus = "正在启动安装…"
+                                                    if (!packageManager.canRequestPackageInstalls()) {
+                                                        installPermissionLauncher.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                                                    } else {
+                                                        UpdateManager.install(this@MainActivity)
+                                                    }
+                                                }
+                                            } catch (e: Exception) { updateStatus = e.message ?: "更新失败" }
                                             finally { updateBusy = false }
                                         }
                                     }, modifier = Modifier.weight(1f)) { Text(if (updateBusy) "检查中…" else "检查更新") }
-                                    if (availableUpdate != null) {
-                                        Button(
-                                            enabled = !updateBusy,
-                                            onClick = {
-                                                val update = availableUpdate!!
-                                                updateBusy = true
-                                                updateStatus = "正在下载 ${update.versionName}…"
-                                                lifecycleScope.launch {
-                                                    try {
-                                                        withContext(Dispatchers.IO) { UpdateManager.download(this@MainActivity, update) }
-                                                        availableUpdate = null
-                                                        updateStatus = "正在启动安装…"
-                                                        if (!packageManager.canRequestPackageInstalls()) {
-                                                            installPermissionLauncher.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
-                                                        } else UpdateManager.install(this@MainActivity)
-                                                    } catch (e: Exception) { updateStatus = e.message ?: "更新失败" }
-                                                    finally { updateBusy = false }
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) { Text("更新至 ${availableUpdate!!.versionName}") }
-                                    }
                                 }
                                 if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
@@ -195,9 +206,10 @@ class MainActivity : ComponentActivity() {
 }
 
 private data class CompressedPhoto(val bytes: ByteArray, val name: String)
+private data class CompressedBatch(val photos: List<CompressedPhoto>, val originalBytes: Long, val compressedBytes: Long)
 
-private fun prepareAndSend(context: Context, uris: List<Uri>, sender: String, auth: String, recipient: String): String {
-    require(uris.size <= MAX_PHOTOS) { "一次最多发送 $MAX_PHOTOS 张照片" }
+private fun compressPhotos(context: Context, uris: List<Uri>): CompressedBatch {
+    require(uris.size <= MAX_PHOTOS) { "一次最多选择 $MAX_PHOTOS 张照片" }
     val attachments = mutableListOf<CompressedPhoto>()
     var before = 0L
     var after = 0L
@@ -205,17 +217,14 @@ private fun prepareAndSend(context: Context, uris: List<Uri>, sender: String, au
     uris.forEachIndexed { index, uri ->
         val originalSize = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         if (originalSize > 0) before += originalSize
-
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
             ?: error("无法读取第 ${index + 1} 张照片")
         require(bounds.outWidth > 0 && bounds.outHeight > 0) { "第 ${index + 1} 张照片格式不支持" }
-
         val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, MAX_IMAGE_EDGE)
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
             ?: error("第 ${index + 1} 张照片解码失败")
-
         val oriented = applyExifOrientation(context, uri, bitmap)
         val output = ByteArrayOutputStream()
         var quality = 86
@@ -227,14 +236,14 @@ private fun prepareAndSend(context: Context, uris: List<Uri>, sender: String, au
         val bytes = output.toByteArray()
         oriented.recycle()
         if (oriented !== bitmap) bitmap.recycle()
-
-        require(after + bytes.size <= MAX_TOTAL_ATTACHMENT_BYTES) {
-            "压缩后附件超过 18 MB，请减少照片数量后分批发送"
-        }
+        require(after + bytes.size <= MAX_TOTAL_ATTACHMENT_BYTES) { "压缩后附件超过 18 MB，请减少照片数量后分批选择" }
         after += bytes.size
         attachments += CompressedPhoto(bytes, "KindlePhoto_${(index + 1).toString().padStart(2, '0')}.jpg")
     }
+    return CompressedBatch(attachments, before, after)
+}
 
+private fun sendCompressedPhotos(sender: String, auth: String, recipient: String, attachments: List<CompressedPhoto>) {
     val props = Properties().apply {
         put("mail.smtp.host", "smtp.qq.com")
         put("mail.smtp.port", "465")
@@ -262,7 +271,6 @@ private fun prepareAndSend(context: Context, uris: List<Uri>, sender: String, au
         setContent(multipart)
     }
     Transport.send(message)
-    return "原图约 ${formatBytes(before)} → 压缩后 ${formatBytes(after)}"
 }
 
 private fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
