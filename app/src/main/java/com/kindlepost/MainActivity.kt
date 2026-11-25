@@ -170,9 +170,9 @@ class MainActivity : ComponentActivity() {
                         title = { Text("设置") },
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(sender, { sender = it }, label = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(authCode, { authCode = it }, label = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                                OutlinedTextField(recipient, { recipient = it }, label = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                                OutlinedTextField(sender, { sender = it; prefs.edit().putString("sender", it.trim()).apply() }, placeholder = { Text("QQ 发件邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(50))
+                                OutlinedTextField(authCode, { authCode = it; prefs.edit().putString("auth", it.trim()).apply() }, placeholder = { Text("QQ 邮箱授权码") }, singleLine = true, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(50))
+                                OutlinedTextField(recipient, { recipient = it; prefs.edit().putString("recipient", it.trim()).apply() }, placeholder = { Text("Kindle 接收邮箱") }, singleLine = true, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(50))
                                 HorizontalDivider()
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                     Text("当前版本 $currentVersion", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -211,28 +211,20 @@ class MainActivity : ComponentActivity() {
                                             }
                                         },
                                         interactionSource = updateInteraction,
-                                        modifier = Modifier.weight(1f).graphicsLayer { scaleX = updateScale; scaleY = updateScale }
+                                        modifier = Modifier.weight(1f).height(58.dp).graphicsLayer { scaleX = updateScale; scaleY = updateScale },
+                                        shape = RoundedCornerShape(50)
                                     ) {
                                         if (updateBusy) {
                                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                             Spacer(Modifier.width(8.dp))
-                                            Text("更新中…")
-                                        } else Text("检查更新")
+                                        }
+                                        Text(if (updateStatus.isNotBlank()) updateStatus else if (updateBusy) "更新中…" else "检查更新", maxLines = 1)
                                     }
                                 }
-                                if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
                         },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                prefs.edit().putString("sender", sender.trim()).putString("auth", authCode.trim()).putString("recipient", recipient.trim()).apply()
-                                sender = sender.trim()
-                                authCode = authCode.trim()
-                                recipient = recipient.trim()
-                                settingsOpen = false
-                            }) { Text("保存") }
-                        },
-                        dismissButton = { TextButton(onClick = { settingsOpen = false }) { Text("取消") } }
+                        confirmButton = {},
+                        dismissButton = {}
                     )
                 }
             }
