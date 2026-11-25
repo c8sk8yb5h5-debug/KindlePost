@@ -39,7 +39,7 @@ object UpdateManager {
         }
     }
 
-    fun downloadAndInstall(context: Context, update: AppUpdate) {
+    fun download(context: Context, update: AppUpdate) {
         val target = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "KindlePost-update.apk")
         target.parentFile?.mkdirs()
         val connection = (URL(update.downloadUrl).openConnection() as HttpURLConnection).apply {
@@ -78,6 +78,11 @@ object UpdateManager {
             connection.disconnect()
         }
 
+    }
+
+    fun install(context: Context) {
+        val target = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "KindlePost-update.apk")
+        check(target.exists() && target.length() > 0) { "更新文件不存在" }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
