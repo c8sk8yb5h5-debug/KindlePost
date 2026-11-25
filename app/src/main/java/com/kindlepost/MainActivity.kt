@@ -173,7 +173,8 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxWidth()
                                         ) { Text("更新至 ${availableUpdate!!.versionName}") }
                                     }
-                                    if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
                         },
                         confirmButton = {
