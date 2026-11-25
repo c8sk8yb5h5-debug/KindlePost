@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Environment
 import java.io.File
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
 
                 val (settingsPressSource, settingsPressModifier) = rememberButtonPress()
                 val (photoPressSource, photoPressModifier) = rememberButtonPress()
+                val (clearPressSource, clearPressModifier) = rememberButtonPress()
                 val (sendPressSource, sendPressModifier) = rememberButtonPress()
 
                 Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFFFFFEFC)).windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -129,7 +131,14 @@ class MainActivity : ComponentActivity() {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !busy, interactionSource = photoPressSource, modifier = Modifier.weight(1f).height(58.dp).then(photoPressModifier), shape = RoundedCornerShape(32.dp), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { PhotoGlyph(); Spacer(Modifier.width(10.dp)); Text(if (photos.isEmpty()) "选择照片" else "添加照片", fontSize = 17.sp) }
-                        if (photos.isNotEmpty()) OutlinedButton(onClick = { photos = emptyList(); compressedBatch = null; sizes = ""; status = "" }, enabled = !busy) { Text("清空") }
+                        if (photos.isNotEmpty()) {
+                            IconButton(
+                                onClick = { photos = emptyList(); compressedBatch = null; sizes = ""; status = "" },
+                                enabled = !busy,
+                                interactionSource = clearPressSource,
+                                modifier = Modifier.size(48.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape).then(clearPressModifier)
+                            ) { androidx.compose.material3.Text("×", fontSize = 24.sp, color = MaterialTheme.colorScheme.primary) }
+                        }
                     }
                     if (photos.isNotEmpty()) {
                         Text("已选 ${photos.size}/${MAX_PHOTOS} 张", style = MaterialTheme.typography.titleSmall)
