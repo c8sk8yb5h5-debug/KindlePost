@@ -31,7 +31,7 @@ object UpdateManager {
             val versionCode = json.getInt("versionCode")
             val versionName = json.getString("versionName")
             val downloadUrl = json.getString("downloadUrl")
-            require(downloadUrl.startsWith("https://github.com/$" + "c8sk8yb5h5-debug/KindlePost/releases/download/")) { "更新地址无效" }
+            require(downloadUrl.startsWith("https://github.com/c8sk8yb5h5-debug/KindlePost/releases/download/")) { "更新地址无效" }
             val current = context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
             return if (versionCode > current) AppUpdate(versionName, versionCode, downloadUrl) else null
         } finally {
