@@ -244,15 +244,12 @@ private fun compressPhotos(context: Context, uris: List<Uri>): CompressedBatch {
     uris.forEachIndexed { index, uri ->
         val originalSize = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         if (originalSize > 0) before += originalSize
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: error("无法读取第 ${index + 1} 张照片")
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "第 ${index + 1} 张照片格式不支持" }
-        val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, MAX_IMAGE_EDGE)
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
-            ?: error("第 ${index + 1} 张照片解码失败")
-        val oriented = applyExifOrientation(context, uri, bitmap)
+        val bitmap = try {
+            decodePhotoBitmap(context, uri)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("无法读取第 ${index + 1} 张照片：${e.message ?: "格式不支持或文件不可访问"}", e)
+        }
+        val oriented = bitmap
         val output = ByteArrayOutputStream()
         var quality = 86
         do {
@@ -262,7 +259,6 @@ private fun compressPhotos(context: Context, uris: List<Uri>): CompressedBatch {
         } while (true)
         val bytes = output.toByteArray()
         oriented.recycle()
-        if (oriented !== bitmap) bitmap.recycle()
         require(after + bytes.size <= MAX_TOTAL_ATTACHMENT_BYTES) { "压缩后附件超过 18 MB，请减少照片数量后分批选择" }
         after += bytes.size
         attachments += CompressedPhoto(bytes, "KindlePhoto_${(index + 1).toString().padStart(2, '0')}.jpg")
@@ -300,6 +296,28 @@ private fun sendCompressedPhotos(sender: String, auth: String, recipient: String
     Transport.send(message)
 }
 
+private fun decodePhotoBitmap(context: Context, uri: Uri): Bitmap {
+    if (android.os.Build.VERSION.SDK_INT >= 28) {
+        val source = ImageDecoder.createSource(context.contentResolver, uri)
+        return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val width = info.size.width
+            val height = info.size.height
+            val scale = minOf(1f, MAX_IMAGE_EDGE.toFloat() / maxOf(width, height))
+            decoder.setTargetSize((width * scale).toInt().coerceAtLeast(1), (height * scale).toInt().coerceAtLeast(1))
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = false
+        }
+    }
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        ?: error("图片文件无法打开")
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "图片格式不支持" }
+    val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, MAX_IMAGE_EDGE)
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    val decoded = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+        ?: error("图片解码失败")
+    return applyExifOrientation(context, uri, decoded)
+}
 private fun calculateInSampleSize(width: Int, height: Int, maxEdge: Int): Int {
     var sample = 1
     while (maxOf(width, height) / (sample * 2) >= maxEdge) sample *= 2
