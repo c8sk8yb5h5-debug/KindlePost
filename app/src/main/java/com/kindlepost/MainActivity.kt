@@ -79,7 +79,6 @@ class MainActivity : ComponentActivity() {
                 var updateStatus by remember { mutableStateOf("") }
                 var availableUpdate by remember { mutableStateOf<AppUpdate?>(null) }
                 var updateBusy by remember { mutableStateOf(false) }
-                var downloadedUpdate by remember { mutableStateOf(File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "KindlePost-update.apk").exists()) }
                 var settingsOpen by remember { mutableStateOf(false) }
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
@@ -87,6 +86,15 @@ class MainActivity : ComponentActivity() {
                     photos = selected.take(MAX_PHOTOS)
                     status = if (photos.isEmpty()) "未选择照片" else "已选择 ${photos.size} 张照片"
                     sizes = ""
+                }
+
+                val installPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) {
+                    if (packageManager.canRequestPackageInstalls()) {
+                        try { UpdateManager.install(this@MainActivity) }
+                        catch (e: Exception) { updateStatus = "无法启动安装程序" }
+                    } else updateStatus = "未获得安装权限"
                 }
 
                 Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFFFFFEFC)).windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -143,20 +151,29 @@ class MainActivity : ComponentActivity() {
                                             finally { updateBusy = false }
                                         }
                                     }, modifier = Modifier.weight(1f)) { Text(if (updateBusy) "检查中…" else "检查更新") }
-                                    if (availableUpdate != null) Button(onClick = {
-                                        try {
-                                            UpdateManager.download(this@MainActivity, availableUpdate!!)
-                                            downloadedUpdate = true
-                                            updateStatus = "已开始下载"
-                                            availableUpdate = null
-                                        } catch (e: Exception) { updateStatus = "下载失败" }
-                                    }, modifier = Modifier.weight(1f)) { Text("下载更新") }
-                                }
-                                if (downloadedUpdate) OutlinedButton(onClick = {
-                                    if (!packageManager.canRequestPackageInstalls()) startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
-                                    else try { UpdateManager.install(this@MainActivity) } catch (e: Exception) { updateStatus = "安装失败" }
-                                }, modifier = Modifier.fillMaxWidth()) { Text("安装更新") }
-                                if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
+                                    if (availableUpdate != null) {
+                                        Button(
+                                            enabled = !updateBusy,
+                                            onClick = {
+                                                val update = availableUpdate!!
+                                                updateBusy = true
+                                                updateStatus = "正在下载 ${update.versionName}…"
+                                                lifecycleScope.launch {
+                                                    try {
+                                                        withContext(Dispatchers.IO) { UpdateManager.download(this@MainActivity, update) }
+                                                        availableUpdate = null
+                                                        updateStatus = "正在启动安装…"
+                                                        if (!packageManager.canRequestPackageInstalls()) {
+                                                            installPermissionLauncher.launch(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                                                        } else UpdateManager.install(this@MainActivity)
+                                                    } catch (e: Exception) { updateStatus = e.message ?: "更新失败" }
+                                                    finally { updateBusy = false }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) { Text("更新至 ${availableUpdate!!.versionName}") }
+                                    }
+                                    if (updateStatus.isNotBlank()) Text(updateStatus, style = MaterialTheme.typography.bodySmall)
                             }
                         },
                         confirmButton = {
